@@ -2,6 +2,7 @@ import os
 import telebot
 from flask import Flask, request
 
+# Token ከ Render Variables ይቀበላል
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
@@ -17,7 +18,7 @@ def handle_webhook():
 
 @bot.message_handler(func=lambda message: True)
 def echo_all(message):
-    bot.reply_to(message, "ሰላም ሰናይ! አሁን በይፋ ተገናኝተናል!")
+    bot.reply_to(message, "ሰላም ሰናይ! አሁን ግንኙነቱ ሰርቷል።")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
