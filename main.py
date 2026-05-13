@@ -2,11 +2,11 @@ import os
 import telebot
 from flask import Flask, request
 
+# Token ከ Render Variables ይቀበላል
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 
-# ይህ ክፍል ቴሌግራም መልእክት ሲልክ የሚቀበለው ነው
 @app.route('/', methods=['POST', 'GET'])
 def webhook():
     if request.method == 'POST':
@@ -17,7 +17,9 @@ def webhook():
 
 @bot.message_handler(func=lambda message: True)
 def echo_all(message):
-    bot.reply_to(message, "አሁን ሰርቷል! መልእክትህ ደርሶኛል።")
+    bot.reply_to(message, "አሁን በይፋ ተገናኝተናል!")
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get('PORT', 5000)))
+    # Render የሚፈልገውን ፖርት በትክክል ለመያዝ
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
