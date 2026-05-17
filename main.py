@@ -22,7 +22,7 @@ def webhook():
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return 'ok', 200
-    return 'Gemini Bot is Server Running!', 200
+    return 'Gemini Bot Server is Running!', 200
 
 # 4. የ /start command ማስተናገጃ
 @bot.message_handler(commands=['start'])
@@ -38,7 +38,8 @@ def handle_chat(message):
         response = model.generate_content(user_text)
         bot.reply_to(message, response.text)
     except Exception as e:
-        bot.reply_to(message, "ይቅርታ፣ መልስ ለማዘጋጀት ተቸግሬያለሁ። እባክህ ትንሽ ቆይተህ ሞክር።")
+        # እውነተኛውን ስህተት በቀጥታ ቴሌግራም ላይ እንዲያሳየን ማዘዝ (አዲሱ ለውጥ)
+        bot.reply_to(message, f"❌ ስህተት ተፈጥሯል:\n{str(e)}")
         print(f"Error: {e}")
 
 if __name__ == "__main__":
