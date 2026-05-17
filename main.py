@@ -7,11 +7,10 @@ import google.generativeai as genai
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 GEMINI_KEY = os.environ.get('GEMINI_KEY')
 
-# 2. የቴሌግራም እና የ Gemini ዝግጅት
+# 2. የቴሌግራም እና የ Gemini ዝግጅት (የተስተካከለ ስም)
 bot = telebot.TeleBot(BOT_TOKEN)
 genai.configure(api_key=GEMINI_KEY)
 model = genai.GenerativeModel("models/gemini-1.5-flash")
-
 
 app = Flask(__name__)
 
@@ -39,7 +38,7 @@ def handle_chat(message):
         response = model.generate_content(user_text)
         bot.reply_to(message, response.text)
     except Exception as e:
-        # እውነተኛውን ስህተት በቀጥታ ቴሌግራም ላይ እንዲያሳየን ማዘዝ (አዲሱ ለውጥ)
+        # ለጊዜው ስህተት ካለ በግልጽ እንዲነግረን ማድረጊያ
         bot.reply_to(message, f"❌ ስህተት ተፈጥሯል:\n{str(e)}")
         print(f"Error: {e}")
 
@@ -47,4 +46,3 @@ if __name__ == "__main__":
     # Render የሚፈልገውን ፖርት በትክክል መያዝ
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
-    
