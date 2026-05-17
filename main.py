@@ -1,20 +1,16 @@
 import os
 import telebot
+import requests
 from flask import Flask, request
-import google.generativeai as genai
 
 # 1. የ Render ምስጢራዊ ቁልፎችን ማንበቢያ
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 GEMINI_KEY = os.environ.get('GEMINI_KEY')
 
-# 2. የቴሌግራም እና የ Gemini ዝግጅት (ሁለንተናዊውን ሞዴል በመጠቀም)
 bot = telebot.TeleBot(BOT_TOKEN)
-genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel("models/text-bison-001")
-
 app = Flask(__name__)
 
-# 3. የዌብሁክ በር
+# 2. የዌብሁክ በር
 @app.route('/', methods=['POST', 'GET'])
 def webhook():
     if request.method == 'POST':
@@ -22,20 +18,41 @@ def webhook():
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return 'ok', 200
-    return 'Gemini Bot Server is Running!', 200
+    return 'Gemini Direct Server is Running!', 200
 
-# 4. የ /start ማስተናገጃ
+# 3. የ /start ማስተናገጃ
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "ሰላም ሰናይ 👋 እኔ የ Gemini AI ቦት ነኝ። የምትፈልገውን ጥያቄ ጠይቀኝ!")
+    bot.reply_to(message, "ሰላም ሰናይ 👋 እኔ በቀጥታ መስመር የሚሰራው የ Gemini AI ቦት ነኝ። የምትፈልገውን ጠይቀኝ!")
 
-# 5. የቻት ማስተናገጃ
+# 4. ዋናው የቻት ማስተናገጃ (በቀጥታ በ URL የሚገናኝ)
 @bot.message_handler(func=lambda message: True)
 def handle_chat(message):
     try:
         user_text = message.text
-        response = model.generate_content(user_text)
-        bot.reply_to(message, response.text)
+        
+        # የጉግል ይፋዊ የ API በር (የስሪት ግጭት የሌለበት)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+        
+        headers = {'Content-Type': 'application/json'}
+        payload = {
+            "contents": [{
+                "parts": [{"text": user_text}]
+            }]
+        }
+        
+        # በቀጥታ ወደ ጉግል መላክ
+        response = requests.post(url, headers=headers, json=payload)
+        response_data = response.json()
+        
+        # መልሱን ፈልቅቆ ማውጣት
+        if 'candidates' in response_data:
+            ai_reply = response_data['candidates'][0]['content']['parts'][0]['text']
+            bot.reply_to(message, ai_reply)
+        else:
+            # ጉግል የላከውን እውነተኛ ምላሽ በቀጥታ ማሳያ
+            bot.reply_to(message, f"⚠️ ጉግል መልስ አልሰጠም:\n{str(response_data)}")
+            
     except Exception as e:
         bot.reply_to(message, f"❌ ስህተት ተፈጥሯል:\n{str(e)}")
 
