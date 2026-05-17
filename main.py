@@ -10,7 +10,8 @@ GEMINI_KEY = os.environ.get('GEMINI_KEY')
 # 2. የቴሌግራም እና የ Gemini ዝግጅት
 bot = telebot.TeleBot(BOT_TOKEN)
 genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("models/gemini-1.5-flash")
+
 
 app = Flask(__name__)
 
@@ -46,3 +47,4 @@ if __name__ == "__main__":
     # Render የሚፈልገውን ፖርት በትክክል መያዝ
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
+    
