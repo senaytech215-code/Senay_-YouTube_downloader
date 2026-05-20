@@ -18,44 +18,42 @@ def webhook():
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return 'ok', 200
-    return 'Model Lister Server is Running!', 200
+    return 'Gemini 2.5 Flash Server is Running!', 200
 
 # 3. የ /start ማስተናገጃ
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "ሰላም ሰናይ 👋 አሁን ማንኛውንም ጽሑፍ ጻፍልኝና ያሉትን የ Gemini ሞዴሎች ዝርዝር በሙሉ አወጣልሃለሁ!")
+    bot.reply_to(message, "ሰላም ሰናይ 👋 አሁን በታላቁ Gemini 2.5 Flash ሞዴል ሙሉ በሙሉ ዝግጁ ሆኛለሁ! የምትፈልገውን ጥያቄ ጠይቀኝ።")
 
-# 4. ዋናው ማስተናገጃ (የጉግልን ሞዴሎች በሙሉ ዘርዝሮ ለቴሌግራም የሚልክ)
+# 4. ዋናው የቻት ማስተናገጃ (ወደ አዲሱ gemini-2.5-flash የተመራ)
 @bot.message_handler(func=lambda message: True)
 def handle_chat(message):
     try:
-        # 🎯 ጉግል ያለውን የሞዴሎች ዝርዝር (ListModels) የምንጠይቅበት ይፋዊ የ API በር
-        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_KEY}"
+        user_text = message.text
         
-        response = requests.get(url)
+        # 🎯 በጉግል ዝርዝር መሠረት ትክክለኛው የ API መጥሪያ መስመር
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}"
+        
+        headers = {'Content-Type': 'application/json'}
+        payload = {
+            "contents": [{
+                "parts": [{"text": user_text}]
+            }]
+        }
+        
+        # ወደ ጉግል ጥያቄውን መላክ
+        response = requests.post(url, headers=headers, json=payload)
         response_data = response.json()
         
-        # ምላሹ በትክክል ከመጣ ዝርዝሩን ማዘጋጀት
-        if 'models' in response_data:
-            model_list_text = "🎯 **የተገኙ የጉግል AI ሞዴሎች ዝርዝር፦**\n\n"
-            
-            # የመጀመሪያዎቹን 15 ሞዴሎች ስም ብቻ ቀንጭቦ ለቴሌግራም ማደራጃ
-            for index, model in enumerate(response_data['models'][:15], start=1):
-                model_name = model.get('name', 'Unknown')
-                supported_methods = model.get('supportedGenerationMethods', [])
-                
-                # generateContent የሚችሉትን ብቻ ለይቶ ለማወቅ ምልክት ማድረግ
-                method_status = "✅" if "generateContent" in str(supported_methods) else "❌"
-                
-                model_list_text += f"{index}. `{model_name}` {method_status}\n"
-                
-            bot.reply_to(message, model_list_text, parse_mode="Markdown")
+        # መልሱን ፈልቅቆ ማውጣት
+        if 'candidates' in response_data:
+            ai_reply = response_data['candidates'][0]['content']['parts'][0]['text']
+            bot.reply_to(message, ai_reply)
         else:
-            # ስህተት ካለ ሙሉውን መልእክት ማሳያ
-            bot.reply_to(message, f"⚠️ ዝርዝሩን ማግኘት አልተቻለም:\n{str(response_data)}")
+            bot.reply_to(message, f"⚠️ ጉግል ምላሽ አልሰጠም:\n{str(response_data)}")
             
     except Exception as e:
-        bot.reply_to(message, f"❌ በኮዱ ላይ ስህተት ተፈጥሯል:\n{str(e)}")
+        bot.reply_to(message, f"❌ ስህተት ተፈጥሯል:\n{str(e)}")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
