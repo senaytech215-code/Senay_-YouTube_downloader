@@ -18,21 +18,21 @@ def webhook():
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return 'ok', 200
-    return 'Gemini Direct Server is Running!', 200
+    return 'Gemini V1 Server is Running!', 200
 
 # 3. የ /start ማስተናገጃ
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "ሰላም ሰናይ 👋 እኔ በቀጥታ መስመር የሚሰራው የ Gemini AI ቦት ነኝ። የምትፈልገውን ጠይቀኝ!")
+    bot.reply_to(message, "ሰላም ሰናይ 👋 እኔ በ የተረጋጋው Gemini API v1 የምሰራው ቦት ነኝ። የምትፈልገውን ጠይቀኝ!")
 
-# 4. ዋናው የቻት ማስተናገጃ (በቀጥታ በ URL የሚገናኝ)
+# 4. ዋናው የቻት ማስተናገጃ (ወደ v1 ስሪት የተቀየረ)
 @bot.message_handler(func=lambda message: True)
 def handle_chat(message):
     try:
         user_text = message.text
         
-        # የጉግል ይፋዊ የ API በር (የስሪት ግጭት የሌለበት)
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+        # 🎯 ለአንዴና ለመጨረሻ ጊዜ ስሪቱን ወደ v1 ቀይረነዋል
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
         
         headers = {'Content-Type': 'application/json'}
         payload = {
@@ -41,17 +41,16 @@ def handle_chat(message):
             }]
         }
         
-        # በቀጥታ ወደ ጉግል መላክ
+        # ለጉግል ጥያቄውን መላክ
         response = requests.post(url, headers=headers, json=payload)
         response_data = response.json()
         
-        # መልሱን ፈልቅቆ ማውጣት
+        # ከጉግል የመጣውን ምላሽ መፍታት
         if 'candidates' in response_data:
             ai_reply = response_data['candidates'][0]['content']['parts'][0]['text']
             bot.reply_to(message, ai_reply)
         else:
-            # ጉግል የላከውን እውነተኛ ምላሽ በቀጥታ ማሳያ
-            bot.reply_to(message, f"⚠️ ጉግል መልስ አልሰጠም:\n{str(response_data)}")
+            bot.reply_to(message, f"⚠️ ጉግል ምላሽ አልሰጠም (የእርጋታ ፍተሻ):\n{str(response_data)}")
             
     except Exception as e:
         bot.reply_to(message, f"❌ ስህተት ተፈጥሯል:\n{str(e)}")
