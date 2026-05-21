@@ -15,10 +15,9 @@ GEMINI_KEYS = [key for key in GEMINI_KEYS if key]
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 
-# 🧠 የተጠቃሚዎችን መረጃ (ትውስታ፣ ጾታ እና የጊዜ ገደብ) በጊዜያዊነት መያዣ ዲክሽነሪዎች
-user_memory = {}       # የውይይት ታሪክ መያዣ
-user_gender = {}       # የተጠቃሚዎች ጾታ መያዣ ('male' ወይም 'female')
-user_last_time = {}    # የመጨረሻ ጥያቄ የተጠየቀበት ሰዓት (ለ 7 ሰከንድ ገደብ)
+user_memory = {}       
+user_gender = {}       
+user_last_time = {}    
 
 @app.route('/', methods=['POST', 'GET'])
 def webhook():
@@ -27,24 +26,26 @@ def webhook():
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return 'ok', 200
-    return 'Senay Tech Smart AI Server is Running!', 200
+    return 'Senay Tech Blue Styled Server is Running!', 200
 
-# 🎯 የ /start ትዕዛዝ - ስም የሚጠራ እና ጾታ የሚያስመርጥ
+# 🎯 የ /start ትዕዛዝ - ስም እና Senay Tech ሰማያዊ ሆነው የተቀየሩበት
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.chat.id
     first_name = message.from_user.first_name or "ወዳጄ"
     
-    # ትውስታዎችን ማጽዳት (Reset)
     user_memory[user_id] = []
     
+    # 🔵 እዚህ ጋ ስሙን እና Senay Techን ሰማያዊ ማድረጊያ ሊንክ ተጠቅመናል
+    blue_name = f"[{first_name}](tg://user?id={user_id})"
+    blue_brand = "[Senay Tech](https://t.me/Senaytech)"
+    
     welcome_text = (
-        f"ሰላም {first_name} 👋! እንኳን ደህና መጣህ።\n\n"
-        f"እኔ በ **Senay Tech** የሰለጠንኩ፣ ችግርን የምረዳ እና አብሬህ የምጓዝ የ AI ረዳት ነኝ። "
+        f"ሰላም {blue_name} 👋! እንኳን ደህና መጣህ።\n\n"
+        f"እኔ በ {blue_brand} የሰለጠንኩ፣ ችግርን የምረዳ እና አብሬህ የምጓዝ የ AI ረዳት ነኝ። "
         f"ከአንተ ጋር በምቾት ለመጨዋወት እንድንችል እባክህ ጾታህን ምረጥልኝ፦"
     )
     
-    # የጾታ መምረጫ ቁልፎች (Inline Buttons)
     markup = telebot.types.InlineKeyboardMarkup()
     btn_male = telebot.types.InlineKeyboardButton("ወንድ (ጀግናው) 🦁", callback_data="set_male")
     btn_female = telebot.types.InlineKeyboardButton("ሴት (ቆንጅት) ✨", callback_data="set_female")
@@ -52,52 +53,48 @@ def send_welcome(message):
     
     bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode="Markdown")
 
-# 🔘 የተጠቃሚውን የጾታ ምርጫ መቀበያ (Callback Handler)
 @bot.callback_query_handler(func=lambda call: call.data in ["set_male", "set_female"])
 def handle_gender_selection(call):
     user_id = call.message.chat.id
     first_name = call.message.chat.first_name or "ወዳጄ"
+    blue_name = f"[{first_name}](tg://user?id={user_id})"
     
     if call.data == "set_male":
         user_gender[user_id] = "male"
-        reply = f"እሺ ጀግናው {first_name}! 🦁 ጾታህን አስተካክያለሁ። አሁን የፈለግከውን ጥያቄ ጠይቀኝ፣ ወንድሜ!"
+        reply = f"እሺ ጀግናው {blue_name}! 🦁 ጾታህን አስተካክያለሁ። አሁን የፈለግከውን ጥያቄ ጠይቀኝ፣ ወንድሜ!"
     else:
         user_gender[user_id] = "female"
-        reply = f"እሺ ቆንጅት {first_name}! ✨ ጾታሽን አስተካክያለሁ። አሁን የሚሰማሽን ወይም ማወቅ የምትፈልጊውን ማንኛውንም ነገር ጠይቂኝ!"
+        reply = f"እሺ ቆንጅት {blue_name}! ✨ ጾታሽን አስተካክያለሁ። አሁን የሚሰማሽን ወይም ማወቅ የምትፈልጊውን ማንኛውንም ነገር ጠይቂኝ!"
         
     bot.answer_callback_query(call.id)
-    bot.edit_message_text(reply, chat_id=user_id, message_id=call.message.message_id)
+    bot.edit_message_text(reply, chat_id=user_id, message_id=call.message.message_id, parse_mode="Markdown")
 
-# 🧠 የጌሚኒ ጥያቄ መላኪያ ሞተር (ከትውስታ እና ከባህሪ ሎጂክ ጋር)
 def ask_gemini(user_id, user_text):
-    # የሰናይ ቴክን ባህሪ እና የኢትዮጵያዊነትን ለዛ በጀርባ ለጌሚኒ ማስተማሪያ (System Prompt)
     gender = user_gender.get(user_id, "male")
     gender_instruction = (
-        "ተጠቃሚው ወንድ ስለሆነ 'ጀግናው'፣ 'በርታ'፣ 'ወንድሜ' እያልክ አበረታታው።" 
+        "ተጠቃሚው ወንድ ስለሆነ 'ጀግናው'፣ 'በርታ'፣ 'ወንድሜ' እያልክ አበረታታው" 
         if gender == "male" else 
-        "ተጠቃሚዋ ሴት ስለሆነች 'ቆንጅት'፣ 'እህቴ' እያልክ በጥሩ የኢትዮጵያዊ ቀልድ ለዛ አረጋጋትና አበረታታት።"
+        "ተጠቃሚዋ ሴት ስለሆነች 'ቆንጅት'፣ 'እህቴ' እያልክ በጥሩ የኢትዮጵያዊ ቀልድ ለዛ አረጋጋትና አበረታታት"
     )
     
+    # 🔵 ለጌሚኒ ራሱ Senay Techን ሁልጊዜ በእንግሊዝኛ ብቻ እንዲጽፍ መመሪያ ጨምረንለታል
     system_instruction = (
-        f"You are an AI assistant trained by 'Senay Tech'. {gender_instruction} "
+        f"You are an AI assistant trained by 'Senay Tech'. {gender_instruction}. "
+        "CRITICAL: Always write 'Senay Tech' in English exactly as 'Senay Tech', never translate it to Amharic. "
         "Be helpful, empathetic, friendly, and act like a real Ethiopian close friend. "
         "Use engaging Amharic with a touch of polite humor. Keep answers precise, scannable, and inspiring."
     )
     
-    # የድሮ ውይይቶችን ከትውስታ ማውጣት
     if user_id not in user_memory:
         user_memory[user_id] = []
         
-    # የጌሚኒ የውይይት መዋቅር (Chat History Structure) ማዘጋጀት
     contents = []
     for past_user, past_ai in user_memory[user_id]:
         contents.append({"role": "user", "parts": [{"text": past_user}]})
         contents.append({"role": "model", "parts": [{"text": past_ai}]})
         
-    # የአሁኑን አዲስ ጥያቄ መጨመር
     contents.append({"role": "user", "parts": [{"text": user_text}]})
     
-    # ሙሉ ፔይሎድ ከሲስተም መመሪያ ጋር
     payload = {
         "contents": contents,
         "systemInstruction": {"parts": [{"text": system_instruction}]}
@@ -120,7 +117,9 @@ def ask_gemini(user_id, user_text):
             if 'candidates' in response_data:
                 ai_reply = response_data['candidates'][0]['content']['parts'][0]['text']
                 
-                # አዲሱን ውይይት በትውስታ ውስጥ ማስቀመጥ (የመጨረሻዎቹን 4 ውይይቶች ብቻ ማስቀረት)
+                # 🔵 ጌሚኒ በጽሑፉ መሃል Senay Tech ካለ ሰማያዊ እንዲሆን በኮድ መተካት
+                ai_reply = ai_reply.replace("Senay Tech", "[Senay Tech](https://t.me/Senaytech)")
+                
                 user_memory[user_id].append((user_text, ai_reply))
                 if len(user_memory[user_id]) > 4:
                     user_memory[user_id].pop(0)
@@ -133,13 +132,11 @@ def ask_gemini(user_id, user_text):
             
     return "⏳ ይቅርታ፣ በአሁኑ ሰዓት የጉግል ሲስተም በጣም ተጨናንቋል። እባክዎ ከጥቂት ሰከንዶች በኋላ መልሰው ይሞክሩ።"
 
-# 💬 መደበኛ መልእክቶችን ማስተናገጃ
 @bot.message_handler(func=lambda message: True)
 def handle_chat(message):
     user_id = message.chat.id
     current_time = time.time()
     
-    # ⏱️ ገደብ መቆጣጠሪያ (7 Second Cooldown - ቁጥር 5)
     last_time = user_last_time.get(user_id, 0)
     if current_time - last_time < 7:
         remaining = int(7 - (current_time - last_time))
@@ -153,17 +150,17 @@ def handle_chat(message):
         user_text = message.text
         gender = user_gender.get(user_id, "male")
         
-        # ጾታው ላይ ተመስርቶ የሚለዋወጥ የማሰቢያ ጽሑፍ
+        # 🔵 በማሰብ ላይ... መልእክት ውስጥ Senay Tech ሰማያዊ የተደረገበት
+        blue_brand = "[Senay Tech](https://t.me/Senaytech)"
         thinking_text = "🤔 ለማሰብ ጥቂት ሰከንድ ስጠኝ ጀግናው...\n\n" if gender == "male" else "🤔 ለማሰብ ጥቂት ሰከንድ ስጪኝ ቆንጅት...\n\n"
-        thinking_text += "የባለሙያ የቴክኖሎጂ መረጃዎችን ለማግኘት የቴሌግራም ቻናላችንን @Senaytech ይቀላቀሉ! 🚀"
+        thinking_text += f"የባለሙያ የቴክኖሎጂ መረጃዎችን ለማግኘት የ {blue_brand} ቻናላችንን ይቀላቀሉ! 🚀"
         
-        status_message = bot.reply_to(message, thinking_text)
+        status_message = bot.reply_to(message, thinking_text, parse_mode="Markdown")
         
-        # ምላሹን ከጌሚኒ ማግኘት
         ai_reply = ask_gemini(user_id, user_text)
         
-        # መልእክቱን ማስተካከል
-        bot.edit_message_text(ai_reply, chat_id=user_id, message_id=status_message.message_id)
+        # 🔵 እዚህ ጋ parse_mode="Markdown" መኖሩን ማረጋገጥ አለብን ሊንኩ ሰማያዊ እንዲሆን
+        bot.edit_message_text(ai_reply, chat_id=user_id, message_id=status_message.message_id, parse_mode="Markdown")
             
     except Exception as e:
         if status_message:
