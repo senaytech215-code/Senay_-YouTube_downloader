@@ -1,10 +1,12 @@
 import os
 import telebot
-import requests
 import time
 from flask import Flask, request
+from google import genai
+from google.genai import types
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
+# 3ቱን ቁልፎች በዝርዝር መያዝ
 GEMINI_KEYS = [
     os.environ.get('GEMINI_KEY'),
     os.environ.get('GEMINI_KEY_2'),
@@ -18,6 +20,7 @@ app = Flask(__name__)
 user_memory = {}       
 user_gender = {}       
 user_last_time = {}    
+all_users = set()
 
 @app.route('/', methods=['POST', 'GET'])
 def webhook():
@@ -26,17 +29,16 @@ def webhook():
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return 'ok', 200
-    return 'Senay Tech Blue Styled Server is Running!', 200
+    return 'Senay Tech Official GenAI Server is Running!', 200
 
-# 🎯 የ /start ትዕዛዝ - ስም እና Senay Tech ሰማያዊ ሆነው የተቀየሩበት
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.chat.id
     first_name = message.from_user.first_name or "ወዳጄ"
     
+    all_users.add(user_id)
     user_memory[user_id] = []
     
-    # 🔵 እዚህ ጋ ስሙን እና Senay Techን ሰማያዊ ማድረጊያ ሊንክ ተጠቅመናል
     blue_name = f"[{first_name}](tg://user?id={user_id})"
     blue_brand = "[Senay Tech](https://t.me/Senaytech)"
     
@@ -69,15 +71,24 @@ def handle_gender_selection(call):
     bot.answer_callback_query(call.id)
     bot.edit_message_text(reply, chat_id=user_id, message_id=call.message.message_id, parse_mode="Markdown")
 
+@bot.message_handler(commands=['admin'])
+def check_users(message):
+    user_id = message.chat.id
+    # ⚠️ ማሳሰቢያ: የራስህን መታወቂያ ቁጥር እዚህ ጋር መተካት ትችላለህ
+    if user_id == 703353544: # ምሳሌ ID
+        total = len(all_users)
+        bot.reply_to(message, f"📊 **የሰናይ ቴክ ቦት መረጃ**\n\n• ጠቅላላ የቦቱ ተመዝጋቢዎች ብዛት፦ `{total}` ሰዎች", parse_mode="Markdown")
+    else:
+        bot.reply_to(message, "❌ ይቅርታ፣ ይህ ትዕዛዝ ለቦቱ ባለቤት (Admin) ብቻ የተፈቀደ ነው!")
+
 def ask_gemini(user_id, user_text):
     gender = user_gender.get(user_id, "male")
     gender_instruction = (
         "ተጠቃሚው ወንድ ስለሆነ 'ጀግናው'፣ 'በርታ'፣ 'ወንድሜ' እያልክ አበረታታው" 
         if gender == "male" else 
-        "ተጠቃሚዋ ሴት ስለሆነች 'ቆንጅት'፣ 'እህቴ' እያልክ በጥሩ የኢትዮጵያዊ ቀልድ ለዛ አረጋጋትና አበረታታት"
+        "ተጠቃሚዋ ሴት ስለሆነች 'ቆንጅት'፣ 'እህቴ' እያልክ በጥሩ የኢትዮጵያዊ ቀልድ ለዛ አበረታታት"
     )
     
-    # 🔵 ለጌሚኒ ራሱ Senay Techን ሁልጊዜ በእንግሊዝኛ ብቻ እንዲጽፍ መመሪያ ጨምረንለታል
     system_instruction = (
         f"You are an AI assistant trained by 'Senay Tech'. {gender_instruction}. "
         "CRITICAL: Always write 'Senay Tech' in English exactly as 'Senay Tech', never translate it to Amharic. "
@@ -88,36 +99,31 @@ def ask_gemini(user_id, user_text):
     if user_id not in user_memory:
         user_memory[user_id] = []
         
-    contents = []
+    # በኦፊሴላዊው መንገድ የውይይት ታሪክን ማዘጋጀት
+    history_contents = []
     for past_user, past_ai in user_memory[user_id]:
-        contents.append({"role": "user", "parts": [{"text": past_user}]})
-        contents.append({"role": "model", "parts": [{"text": past_ai}]})
-        
-    contents.append({"role": "user", "parts": [{"text": user_text}]})
+        history_contents.append(types.Content(role="user", parts=[types.Part.from_text(text=past_user)]))
+        history_contents.append(types.Content(role="model", parts=[types.Part.from_text(text=past_ai)]))
     
-    payload = {
-        "contents": contents,
-        "systemInstruction": {"parts": [{"text": system_instruction}]}
-    }
-    headers = {'Content-Type': 'application/json'}
+    # አዲሱን ጥያቄ መጨመር
+    history_contents.append(types.Content(role="user", parts=[types.Part.from_text(text=user_text)]))
     
+    # እያንዳንዱን ቁልፍ በየተራ መሞከር
     for index, key in enumerate(GEMINI_KEYS):
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
-            response = requests.post(url, headers=headers, json=payload, timeout=12)
-            response_data = response.json()
+            # 🔵 የጉግል ኦፊሴላዊ ደንበኛ (Client) ማስነሻ
+            client = genai.Client(api_key=key)
             
-            if 'error' in response_data:
-                if response_data['error'].get('code') in [429, 503]:
-                    time.sleep(2)
-                    continue
-                else:
-                    return "✖️ በሲስተሙ ላይ ትንሽ ስህተት አጋጥሞኛል።"
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=history_contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction
+                )
+            )
             
-            if 'candidates' in response_data:
-                ai_reply = response_data['candidates'][0]['content']['parts'][0]['text']
-                
-                # 🔵 ጌሚኒ በጽሑፉ መሃል Senay Tech ካለ ሰማያዊ እንዲሆን በኮድ መተካት
+            if response.text:
+                ai_reply = response.text
                 ai_reply = ai_reply.replace("Senay Tech", "[Senay Tech](https://t.me/Senaytech)")
                 
                 user_memory[user_id].append((user_text, ai_reply))
@@ -126,11 +132,12 @@ def ask_gemini(user_id, user_text):
                     
                 return ai_reply
                 
-        except Exception:
+        except Exception as e:
+            print(f"Key {index+1} Exception: {str(e)}")
             time.sleep(2)
             continue
             
-    return "⏳ ይቅርታ፣ በአሁኑ ሰዓት የጉግል ሲስተም በጣም ተጨናንቋል። እባክዎ ከጥቂት ሰከንዶች በኋላ መልሰው ይሞክሩ።"
+    return "⏳ ይቅርታ፣ በአሁኑ ሰዓት የጉግል ሲስተም በጣም ተጨናንቋል። እባክዎ ከ1 ደቂቃ በኋላ መልሰው ይሞክሩ።"
 
 @bot.message_handler(func=lambda message: True)
 def handle_chat(message):
@@ -150,19 +157,16 @@ def handle_chat(message):
         user_text = message.text
         gender = user_gender.get(user_id, "male")
         
-        # 🔵 በማሰብ ላይ... መልእክት ውስጥ Senay Tech ሰማያዊ የተደረገበት
         blue_brand = "[Senay Tech](https://t.me/Senaytech)"
         thinking_text = "🤔 ለማሰብ ጥቂት ሰከንድ ስጠኝ ጀግናው...\n\n" if gender == "male" else "🤔 ለማሰብ ጥቂት ሰከንድ ስጪኝ ቆንጅት...\n\n"
-        thinking_text += f"የባለሙያ የቴክኖሎጂ መረጃዎችን ለማግኘት የ {blue_brand} ቻናላችንን ይቀላቀሉ! 🚀"
+        thinking_text += f" ጠቃሚ የቴክኖሎጂ መረጃዎችን ለማግኘት የ {blue_brand} ቻናላችንን ይቀላቀሉ! 🚀"
         
         status_message = bot.reply_to(message, thinking_text, parse_mode="Markdown")
         
         ai_reply = ask_gemini(user_id, user_text)
-        
-        # 🔵 እዚህ ጋ parse_mode="Markdown" መኖሩን ማረጋገጥ አለብን ሊንኩ ሰማያዊ እንዲሆን
         bot.edit_message_text(ai_reply, chat_id=user_id, message_id=status_message.message_id, parse_mode="Markdown")
             
-    except Exception as e:
+    except Exception:
         if status_message:
             bot.edit_message_text("❌ እባክህ በድጋሚ ሞክር፣ ትንሽ የኔትወርክ መቆራረጥ አጋጥሞኛል።", chat_id=user_id, message_id=status_message.message_id)
         else:
@@ -171,3 +175,4 @@ def handle_chat(message):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
+    
