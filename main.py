@@ -1,11 +1,10 @@
 import os
 import telebot
 import requests
-import time  # 🎯 የሰከንድ ማረፊያ ለመጨመር
+import time
 from flask import Flask, request
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
-
 GEMINI_KEYS = [
     os.environ.get('GEMINI_KEY'),
     os.environ.get('GEMINI_KEY_2'),
@@ -16,6 +15,11 @@ GEMINI_KEYS = [key for key in GEMINI_KEYS if key]
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 
+# 🧠 የተጠቃሚዎችን መረጃ (ትውስታ፣ ጾታ እና የጊዜ ገደብ) በጊዜያዊነት መያዣ ዲክሽነሪዎች
+user_memory = {}       # የውይይት ታሪክ መያዣ
+user_gender = {}       # የተጠቃሚዎች ጾታ መያዣ ('male' ወይም 'female')
+user_last_time = {}    # የመጨረሻ ጥያቄ የተጠየቀበት ሰዓት (ለ 7 ሰከንድ ገደብ)
+
 @app.route('/', methods=['POST', 'GET'])
 def webhook():
     if request.method == 'POST':
@@ -23,57 +27,149 @@ def webhook():
         update = telebot.types.Update.de_json(json_string)
         bot.process_new_updates([update])
         return 'ok', 200
-    return 'Gemini Protected Multi-Key Server is Running!', 200
+    return 'Senay Tech Smart AI Server is Running!', 200
 
+# 🎯 የ /start ትዕዛዝ - ስም የሚጠራ እና ጾታ የሚያስመርጥ
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "ሰላም ሰናይ 👋 ቦቱ በሰከንድ መተንፈሻ ጥበቃ ታድሷል። የምትፈልገውን ጠይቀኝ!")
+    user_id = message.chat.id
+    first_name = message.from_user.first_name or "ወዳጄ"
+    
+    # ትውስታዎችን ማጽዳት (Reset)
+    user_memory[user_id] = []
+    
+    welcome_text = (
+        f"ሰላም {first_name} 👋! እንኳን ደህና መጣህ።\n\n"
+        f"እኔ በ **Senay Tech** የሰለጠንኩ፣ ችግርን የምረዳ እና አብሬህ የምጓዝ የ AI ረዳት ነኝ። "
+        f"ከአንተ ጋር በምቾት ለመጨዋወት እንድንችል እባክህ ጾታህን ምረጥልኝ፦"
+    )
+    
+    # የጾታ መምረጫ ቁልፎች (Inline Buttons)
+    markup = telebot.types.InlineKeyboardMarkup()
+    btn_male = telebot.types.InlineKeyboardButton("ወንድ (ጀግናው) 🦁", callback_data="set_male")
+    btn_female = telebot.types.InlineKeyboardButton("ሴት (ቆንጅት) ✨", callback_data="set_female")
+    markup.add(btn_male, btn_female)
+    
+    bot.send_message(user_id, welcome_text, reply_markup=markup, parse_mode="Markdown")
 
-def ask_gemini(user_text):
-    payload = {"contents": [{"parts": [{"text": user_text}]}]}
+# 🔘 የተጠቃሚውን የጾታ ምርጫ መቀበያ (Callback Handler)
+@bot.callback_query_handler(func=lambda call: call.data in ["set_male", "set_female"])
+def handle_gender_selection(call):
+    user_id = call.message.chat.id
+    first_name = call.message.chat.first_name or "ወዳጄ"
+    
+    if call.data == "set_male":
+        user_gender[user_id] = "male"
+        reply = f"እሺ ጀግናው {first_name}! 🦁 ጾታህን አስተካክያለሁ። አሁን የፈለግከውን ጥያቄ ጠይቀኝ፣ ወንድሜ!"
+    else:
+        user_gender[user_id] = "female"
+        reply = f"እሺ ቆንጅት {first_name}! ✨ ጾታሽን አስተካክያለሁ። አሁን የሚሰማሽን ወይም ማወቅ የምትፈልጊውን ማንኛውንም ነገር ጠይቂኝ!"
+        
+    bot.answer_callback_query(call.id)
+    bot.edit_message_text(reply, chat_id=user_id, message_id=call.message.message_id)
+
+# 🧠 የጌሚኒ ጥያቄ መላኪያ ሞተር (ከትውስታ እና ከባህሪ ሎጂክ ጋር)
+def ask_gemini(user_id, user_text):
+    # የሰናይ ቴክን ባህሪ እና የኢትዮጵያዊነትን ለዛ በጀርባ ለጌሚኒ ማስተማሪያ (System Prompt)
+    gender = user_gender.get(user_id, "male")
+    gender_instruction = (
+        "ተጠቃሚው ወንድ ስለሆነ 'ጀግናው'፣ 'በርታ'፣ 'ወንድሜ' እያልክ አበረታታው።" 
+        if gender == "male" else 
+        "ተጠቃሚዋ ሴት ስለሆነች 'ቆንጅት'፣ 'እህቴ' እያልክ በጥሩ የኢትዮጵያዊ ቀልድ ለዛ አረጋጋትና አበረታታት።"
+    )
+    
+    system_instruction = (
+        f"You are an AI assistant trained by 'Senay Tech'. {gender_instruction} "
+        "Be helpful, empathetic, friendly, and act like a real Ethiopian close friend. "
+        "Use engaging Amharic with a touch of polite humor. Keep answers precise, scannable, and inspiring."
+    )
+    
+    # የድሮ ውይይቶችን ከትውስታ ማውጣት
+    if user_id not in user_memory:
+        user_memory[user_id] = []
+        
+    # የጌሚኒ የውይይት መዋቅር (Chat History Structure) ማዘጋጀት
+    contents = []
+    for past_user, past_ai in user_memory[user_id]:
+        contents.append({"role": "user", "parts": [{"text": past_user}]})
+        contents.append({"role": "model", "parts": [{"text": past_ai}]})
+        
+    # የአሁኑን አዲስ ጥያቄ መጨመር
+    contents.append({"role": "user", "parts": [{"text": user_text}]})
+    
+    # ሙሉ ፔይሎድ ከሲስተም መመሪያ ጋር
+    payload = {
+        "contents": contents,
+        "systemInstruction": {"parts": [{"text": system_instruction}]}
+    }
     headers = {'Content-Type': 'application/json'}
     
     for index, key in enumerate(GEMINI_KEYS):
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={key}"
-            response = requests.post(url, headers=headers, json=payload, timeout=10)
+            response = requests.post(url, headers=headers, json=payload, timeout=12)
             response_data = response.json()
             
             if 'error' in response_data:
-                error_code = response_data['error'].get('code')
-                print(f"Key {index+1} failed with error code: {error_code}")
-                
-                if error_code in [429, 503]:
-                    # 🎯 ዋናው ማስተካከያ፦ ወደ ቀጣዩ ቁልፍ ከመሄዱ በፊት 2 ሰከንድ ሰርቨሩ እንዲያርፍ ማድረግ
+                if response_data['error'].get('code') in [429, 503]:
                     time.sleep(2)
                     continue
                 else:
-                    return f"✖️ ከጉግል ሲስተም ስህተት ተመልሷል: {response_data['error'].get('message')}"
+                    return "✖️ በሲስተሙ ላይ ትንሽ ስህተት አጋጥሞኛል።"
             
             if 'candidates' in response_data:
-                return response_data['candidates'][0]['content']['parts'][0]['text']
+                ai_reply = response_data['candidates'][0]['content']['parts'][0]['text']
                 
-        except Exception as e:
-            print(f"Exception on key {index+1}: {str(e)}")
-            time.sleep(2) # ስህተት ሲመጣ ማረፍ
+                # አዲሱን ውይይት በትውስታ ውስጥ ማስቀመጥ (የመጨረሻዎቹን 4 ውይይቶች ብቻ ማስቀረት)
+                user_memory[user_id].append((user_text, ai_reply))
+                if len(user_memory[user_id]) > 4:
+                    user_memory[user_id].pop(0)
+                    
+                return ai_reply
+                
+        except Exception:
+            time.sleep(2)
             continue
             
-    return "⏳ ይቅርታ ሰናይ፣ በአሁኑ ሰዓት የጉግል ሲስተም በጣም ተጨናንቋል። እባክዎ ከ30 ሰከንድ በኋላ መልሰው ይሞክሩ።"
+    return "⏳ ይቅርታ፣ በአሁኑ ሰዓት የጉግል ሲስተም በጣም ተጨናንቋል። እባክዎ ከጥቂት ሰከንዶች በኋላ መልሰው ይሞክሩ።"
 
+# 💬 መደበኛ መልእክቶችን ማስተናገጃ
 @bot.message_handler(func=lambda message: True)
 def handle_chat(message):
+    user_id = message.chat.id
+    current_time = time.time()
+    
+    # ⏱️ ገደብ መቆጣጠሪያ (7 Second Cooldown - ቁጥር 5)
+    last_time = user_last_time.get(user_id, 0)
+    if current_time - last_time < 7:
+        remaining = int(7 - (current_time - last_time))
+        bot.reply_to(message, f"🚨 እባክህ አትቸኩል ጀግናው! አእምሮዬ እንዳይጨናነቅ {remaining} ሰከንድ ጠብቀኝ።")
+        return
+        
+    user_last_time[user_id] = current_time
     status_message = None
+    
     try:
         user_text = message.text
-        status_message = bot.reply_to(message, "🤔 በማሰብ ላይ...")
-        ai_reply = ask_gemini(user_text)
-        bot.edit_message_text(ai_reply, chat_id=message.chat.id, message_id=status_message.message_id)
+        gender = user_gender.get(user_id, "male")
+        
+        # ጾታው ላይ ተመስርቶ የሚለዋወጥ የማሰቢያ ጽሑፍ
+        thinking_text = "🤔 ለማሰብ ጥቂት ሰከንድ ስጠኝ ጀግናው...\n\n" if gender == "male" else "🤔 ለማሰብ ጥቂት ሰከንድ ስጪኝ ቆንጅት...\n\n"
+        thinking_text += "የባለሙያ የቴክኖሎጂ መረጃዎችን ለማግኘት የቴሌግራም ቻናላችንን @Senaytech ይቀላቀሉ! 🚀"
+        
+        status_message = bot.reply_to(message, thinking_text)
+        
+        # ምላሹን ከጌሚኒ ማግኘት
+        ai_reply = ask_gemini(user_id, user_text)
+        
+        # መልእክቱን ማስተካከል
+        bot.edit_message_text(ai_reply, chat_id=user_id, message_id=status_message.message_id)
             
     except Exception as e:
         if status_message:
-            bot.edit_message_text(f"❌ በቦቱ ላይ ስህተት ተፈጥሯል:\n{str(e)}", chat_id=message.chat.id, message_id=status_message.message_id)
+            bot.edit_message_text("❌ እባክህ በድጋሚ ሞክር፣ ትንሽ የኔትወርክ መቆራረጥ አጋጥሞኛል።", chat_id=user_id, message_id=status_message.message_id)
         else:
-            bot.reply_to(message, f"❌ በቦቱ ላይ ስህተት ተፈጥሯል:\n{str(e)}")
+            bot.reply_to(message, "❌ እባክህ በድጋሚ ሞክር፣ ትንሽ የኔትወርክ መቆራረጥ አጋጥሞኛል።")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
